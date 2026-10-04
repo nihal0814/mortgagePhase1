@@ -1,0 +1,23 @@
+SAMPLE / DEMONSTRATION POLICY
+Mortgage Underwriting Guidelines
+Version: 2026.1
+Effective date: 2026-01-01
+
+DEBT-TO-INCOME REQUIREMENTS
+
+Applications with a calculated debt-to-income ratio above 43% require additional human review.
+This demonstration rule is not a lender regulation and does not automatically reject an application.
+
+LOAN-TO-VALUE REQUIREMENTS
+
+A loan-to-value ratio at or below 80% is within this sample threshold.
+Ratios above 80% require additional human review and verification of the property valuation.
+
+INCOME VERIFICATION
+
+Reviewers should compare the stated monthly gross income with reliable income documents.
+Differences between the application and documents should be investigated before a final decision.
+
+DOCUMENT REVIEW
+
+The reviewer should verify original documents, dates, identity information, and any unclear or conflicting values.
