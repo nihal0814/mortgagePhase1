@@ -7,7 +7,7 @@ import {
   recalculateValidation, validateApplication,
   analyzeApplicationPolicy, deletePolicy, getPolicies, searchPolicies, uploadPolicy,
   getUnderwritingEvents, getUnderwritingReport, runUnderwriting,
-  login, getMe, logout,
+  login, register, getMe, logout,
 } from "./api";
 
 const statuses = ["Draft", "Processing", "Needs Review", "Completed"];
@@ -23,9 +23,29 @@ function StatusBadge({ status }) {
 }
 function Loading() { return <div className="flex items-center justify-center py-12 text-sm text-slate-500"><span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />Loading...</div>; }
 function Login({ onLogin }) {
-  const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  const submit = async (event) => { event.preventDefault(); try { setBusy(true); setError(""); const response = await login({ email, password }); localStorage.setItem("mortgage_access_token", response.data.access_token); onLogin(response.data.user); } catch (err) { setError(err.response?.data?.detail || "Login failed."); } finally { setBusy(false); } };
-  return <div className="grid min-h-screen place-items-center bg-slate-50 p-5"><form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"><div className="mb-8 text-center"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-blue-600 font-bold text-white">M</div><h1 className="text-2xl font-bold text-slate-900">MortgageAI</h1><p className="mt-1 text-sm text-slate-500">Secure loan processing workspace</p></div>{error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}<label className="text-sm font-semibold">Email<input className="field" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label><label className="text-sm font-semibold">Password<input className="field" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label><button className="primary-button mt-3 w-full" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button></form></div>;
+  const [mode, setMode] = useState("login"); const [fullName, setFullName] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const isRegistering = mode === "register";
+  const submit = async (event) => {
+    event.preventDefault();
+    try {
+      setBusy(true); setError("");
+      const response = isRegistering
+        ? await register({ full_name: fullName, email, password })
+        : await login({ email, password });
+      localStorage.setItem("mortgage_access_token", response.data.access_token);
+      onLogin(response.data.user);
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const message = Array.isArray(detail)
+        ? detail.map((item) => item.msg).join(" ")
+        : detail;
+      setError(message || (err.request
+        ? "Could not connect to the backend. Make sure it is running at http://localhost:8000."
+        : (err.message || (isRegistering ? "Could not create the account." : "Login failed."))));
+    } finally { setBusy(false); }
+  };
+  const switchMode = () => { setMode(isRegistering ? "login" : "register"); setError(""); };
+  return <div className="grid min-h-screen place-items-center bg-slate-50 p-5"><form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"><div className="mb-8 text-center"><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-xl bg-blue-600 font-bold text-white">M</div><h1 className="text-2xl font-bold text-slate-900">MortgageAI</h1><p className="mt-1 text-sm text-slate-500">Secure loan processing workspace</p></div>{error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}{isRegistering && <label className="text-sm font-semibold">Full name<input className="field" type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} /></label>}<label className="text-sm font-semibold">Email<input className="field" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label><label className="text-sm font-semibold">Password<input className="field" type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} /></label><button className="primary-button mt-3 w-full" disabled={busy}>{busy ? (isRegistering ? "Creating account..." : "Signing in...") : (isRegistering ? "Sign up" : "Sign in")}</button><p className="mt-5 text-center text-sm text-slate-500">{isRegistering ? "Already have an account?" : "Don't have an account?"}{" "}<button type="button" onClick={switchMode} className="font-semibold text-blue-600 hover:text-blue-800">{isRegistering ? "Sign in" : "Sign up"}</button></p></form></div>;
 }
 function Sidebar({ page, setPage }) {
   const links = [["dashboard", "Dashboard", "▦"], ["applications", "Applications", "▤"], ["new", "New Application", "+"], ["policies", "Policy Knowledge Base", "⌕"]];
