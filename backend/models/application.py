@@ -21,4 +21,9 @@ class Application(Base):
     employment_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="Draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-
+    created_by_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    assigned_to_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    review_status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING_REVIEW")
+    review_completed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    review_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -12,6 +12,9 @@ from models.document import Document
 from schemas.analysis import ApplicationAnalysisResponse, DocumentAnalysisResponse
 from routes.documents import application_or_404, document_or_404
 from services.nemotron import NemotronError, analyze_document, configured, summarize_application
+from models.auth import User
+from services.auth import get_current_user
+from services.application_access import application_for_user
 
 
 router = APIRouter(prefix="/applications", tags=["analysis"])
@@ -26,7 +29,8 @@ def document_analysis_or_404(application_id: str, document_id: str, db: Session)
 
 
 @router.post("/{application_id}/documents/{document_id}/analyze", response_model=DocumentAnalysisResponse)
-def analyze_document_route(application_id: str, document_id: str, db: Session = Depends(get_db)) -> DocumentAnalysis:
+def analyze_document_route(application_id: str, document_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> DocumentAnalysis:
+    application_for_user(application_id, user, db)
     document = document_or_404(application_id, document_id, db)
     if document.extraction_status != "Extracted" or not document.extracted_text:
         raise HTTPException(status_code=409, detail="Extract text successfully before running Nemotron analysis.")
@@ -73,14 +77,14 @@ def analyze_document_route(application_id: str, document_id: str, db: Session = 
 
 
 @router.get("/{application_id}/documents/{document_id}/analysis", response_model=DocumentAnalysisResponse)
-def get_document_analysis(application_id: str, document_id: str, db: Session = Depends(get_db)) -> DocumentAnalysis:
-    application_or_404(application_id, db)
+def get_document_analysis(application_id: str, document_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> DocumentAnalysis:
+    application_for_user(application_id, user, db)
     return document_analysis_or_404(application_id, document_id, db)
 
 
 @router.post("/{application_id}/analyze", response_model=ApplicationAnalysisResponse)
-def analyze_application_route(application_id: str, db: Session = Depends(get_db)) -> ApplicationAnalysis:
-    application_or_404(application_id, db)
+def analyze_application_route(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ApplicationAnalysis:
+    application_for_user(application_id, user, db)
     rows = list(db.execute(select(Document, DocumentAnalysis).join(DocumentAnalysis, DocumentAnalysis.document_id == Document.id).where(Document.application_id == application_id, DocumentAnalysis.status == "Completed")).all())
     if not rows:
         raise HTTPException(status_code=409, detail="Analyze at least one extracted document before creating an application summary.")
@@ -124,8 +128,8 @@ def analyze_application_route(application_id: str, db: Session = Depends(get_db)
 
 
 @router.get("/{application_id}/analysis", response_model=ApplicationAnalysisResponse)
-def get_application_analysis(application_id: str, db: Session = Depends(get_db)) -> ApplicationAnalysis:
-    application_or_404(application_id, db)
+def get_application_analysis(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> ApplicationAnalysis:
+    application_for_user(application_id, user, db)
     summary = db.scalar(select(ApplicationAnalysis).where(ApplicationAnalysis.application_id == application_id))
     if not summary:
         raise HTTPException(status_code=404, detail="No application analysis exists")

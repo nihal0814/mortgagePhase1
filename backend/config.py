@@ -27,6 +27,8 @@ FINANCIAL_TOLERANCE_PERCENT = float(os.getenv("FINANCIAL_TOLERANCE_PERCENT", "2"
 MAX_DTI = float(os.getenv("MAX_DTI")) if os.getenv("MAX_DTI") else None
 MAX_LTV = float(os.getenv("MAX_LTV")) if os.getenv("MAX_LTV") else None
 MIN_CREDIT_SCORE = int(os.getenv("MIN_CREDIT_SCORE")) if os.getenv("MIN_CREDIT_SCORE") else None
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-development-secret")
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 ALLOWED_CATEGORIES = {

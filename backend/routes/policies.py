@@ -11,6 +11,7 @@ from database.connection import get_db
 from models.application import Application
 from models.financial_validation import FinancialValidation
 from models.policy import Policy, PolicyChunk
+from models.auth import User
 from schemas.policy import PolicyAnalysisResponse, PolicyChunkResponse, PolicyResponse, PolicySearchRequest, PolicySearchResponse
 from services.chunking import chunk_policy_pages
 from services.nemotron import NemotronError
@@ -18,6 +19,8 @@ from services.policy_storage import extract_policy_pages, policy_hash, policy_up
 from services.rag import analyze_policy
 from services.retrieval import retrieve_policy
 from services.vector_store import add_chunks, delete_policy
+from services.auth import get_current_user, require_roles
+from services.application_access import application_for_user
 
 
 router = APIRouter(tags=["policies"])
@@ -43,6 +46,7 @@ async def upload_policy(
     category: str = Form("General"),
     version: str = Form(...),
     effective_date: str | None = Form(None),
+    _: User = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ) -> Policy:
     content, original_name, extension = await read_policy_upload(file)
@@ -78,12 +82,12 @@ async def upload_policy(
 
 
 @router.get("/policies", response_model=list[PolicyResponse])
-def list_policies(db: Session = Depends(get_db)) -> list[Policy]:
+def list_policies(_: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[Policy]:
     return list(db.scalars(select(Policy).order_by(Policy.created_at.desc())).all())
 
 
 @router.delete("/policies/{policy_id}", status_code=204)
-def remove_policy(policy_id: str, db: Session = Depends(get_db)) -> None:
+def remove_policy(policy_id: str, _: User = Depends(require_roles("ADMIN")), db: Session = Depends(get_db)) -> None:
     policy = db.get(Policy, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -94,16 +98,14 @@ def remove_policy(policy_id: str, db: Session = Depends(get_db)) -> None:
 
 
 @router.post("/policies/search", response_model=PolicySearchResponse)
-def search_policies(payload: PolicySearchRequest, db: Session = Depends(get_db)) -> PolicySearchResponse:
+def search_policies(payload: PolicySearchRequest, _: User = Depends(get_current_user), db: Session = Depends(get_db)) -> PolicySearchResponse:
     results = retrieve_policy(payload.query, db, payload.top_k or POLICY_TOP_K)
     return PolicySearchResponse(query=payload.query, results=[_chunk_response(item, db) for item in results])
 
 
 @router.post("/applications/{application_id}/policy-analysis", response_model=PolicyAnalysisResponse)
-def application_policy_analysis(application_id: str, db: Session = Depends(get_db)) -> PolicyAnalysisResponse:
-    application = db.get(Application, application_id)
-    if not application:
-        raise HTTPException(status_code=404, detail="Application not found")
+def application_policy_analysis(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> PolicyAnalysisResponse:
+    application = application_for_user(application_id, user, db)
     validation = db.scalar(select(FinancialValidation).where(FinancialValidation.application_id == application_id))
     if not validation:
         raise HTTPException(status_code=409, detail="Run financial validation before policy analysis.")

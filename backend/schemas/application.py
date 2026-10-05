@@ -32,10 +32,13 @@ class StatusUpdate(BaseModel):
     status: Status
 
 
+class AssignmentUpdate(BaseModel):
+    assigned_to_user_id: str | None = None
+
+
 class ApplicationResponse(ApplicationBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     status: Status
     created_at: datetime
-

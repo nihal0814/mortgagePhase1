@@ -1,7 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from config import NVIDIA_BASE_URL, NVIDIA_MODEL, NVIDIA_USE_JSON_MODE
+from models.auth import User
 from services.nemotron import configured
+from services.auth import get_current_user
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -19,7 +21,7 @@ def ai_status() -> dict[str, str | bool]:
 
 
 @router.post("/connectivity")
-def ai_connectivity() -> dict[str, str | bool]:
+def ai_connectivity(_: User = Depends(get_current_user)) -> dict[str, str | bool]:
     if not configured():
         return {"ok": False, "category": "not_configured", "message": "Set NVIDIA_API_KEY, NVIDIA_BASE_URL, and NVIDIA_MODEL."}
     from services.nemotron import NemotronError, _post

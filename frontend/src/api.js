@@ -3,6 +3,29 @@ import axios from "axios";
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
 });
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem("mortgage_access_token");
+      window.dispatchEvent(new Event("mortgage-auth-expired"));
+    }
+    return Promise.reject(error);
+  },
+);
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("mortgage_access_token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+export const login = (data) => api.post("/auth/login", data);
+export const register = (data) => api.post("/auth/register", data);
+export const getMe = () => api.get("/auth/me");
+export const logout = () => api.post("/auth/logout");
+export const getReviewQueue = () => api.get("/applications/review-queue");
+export const getReviewDetail = (id) => api.get(`/applications/${id}/review`);
+export const addReviewNote = (id, note) => api.post(`/applications/${id}/review/notes`, { note });
+export const completeReview = (id, outcome, note) => api.post(`/applications/${id}/review/complete`, { outcome, note });
 
 export const getApplications = (params = {}) => api.get("/applications", { params });
 export const getApplication = (id) => api.get(`/applications/${id}`);

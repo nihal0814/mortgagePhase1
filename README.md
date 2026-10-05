@@ -230,3 +230,37 @@ Then perform the real hosted-NIM smoke test by uploading and extracting a small 
 cd .\frontend
 npm run build
 ```
+
+## Phase 7 authentication and human review
+
+Phase 7 adds JWT authentication, PBKDF2-SHA256 password hashing, role-based user management, private document streaming, reviewer actions, and audit records. The JWT and password implementation uses Python's standard library. Existing SQLite databases are preserved: startup adds missing application security columns and creates new tables without deleting records.
+
+Add these settings to `backend/.env`:
+
+```env
+JWT_SECRET_KEY=replace-with-a-long-random-value
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+```
+
+Create the first administrator locally. The password is entered interactively and is not placed in shell history:
+
+```powershell
+cd D:\NAT\mortgagePhase1\backend
+.\.venv\Scripts\Activate.ps1
+python -m app.cli create-admin
+```
+
+The React app signs in through `/auth/login` and sends the short-lived token as a Bearer token. `ADMIN` users can manage users. `UNDERWRITER` and `ADMIN` users can use the review queue, add notes, resolve issues, request documents, and record a human review outcome. The AI underwriting workflow cannot complete human review.
+
+Important endpoints include:
+
+- `POST /auth/login`, `POST /auth/register`, `GET /auth/me`, `POST /auth/logout`
+- `GET/POST/PATCH /users` (administrator only)
+- `GET /applications/review-queue` and `GET /applications/{id}/review`
+- `POST /applications/{id}/review/notes`
+- `POST /applications/{id}/review/issues/{issue_id}/resolve`
+- `POST /applications/{id}/review/document-requests`
+- `POST /applications/{id}/review/complete`
+- `GET /applications/{id}/documents/{document_id}/file` (authenticated private streaming)
+
+Use a long random JWT secret outside development. Never commit `NVIDIA_API_KEY`, JWT secrets, borrower documents, or SQLite databases.

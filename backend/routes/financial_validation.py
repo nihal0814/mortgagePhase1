@@ -12,6 +12,9 @@ from models.financial_validation import FinancialValidation, ValidationIssue
 from routes.documents import application_or_404
 from schemas.financial_validation import FinancialValidationResponse, ValidationIssueResponse
 from services.financial_validation import FinancialValidationError, build_validation_result
+from models.auth import User
+from services.auth import get_current_user
+from services.application_access import application_for_user
 
 
 router = APIRouter(prefix="/applications", tags=["financial-validation"])
@@ -75,23 +78,25 @@ def response_with_issues(validation: FinancialValidation, db: Session) -> Financ
 
 
 @router.post("/{application_id}/validate", response_model=FinancialValidationResponse)
-def validate_application(application_id: str, db: Session = Depends(get_db)) -> FinancialValidationResponse:
+def validate_application(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FinancialValidationResponse:
+    application_for_user(application_id, user, db)
     return response_with_issues(save_validation(application_id, db), db)
 
 
 @router.post("/{application_id}/validation/recalculate", response_model=FinancialValidationResponse)
-def recalculate_validation(application_id: str, db: Session = Depends(get_db)) -> FinancialValidationResponse:
+def recalculate_validation(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FinancialValidationResponse:
+    application_for_user(application_id, user, db)
     return response_with_issues(save_validation(application_id, db), db)
 
 
 @router.get("/{application_id}/validation", response_model=FinancialValidationResponse)
-def get_application_validation(application_id: str, db: Session = Depends(get_db)) -> FinancialValidationResponse:
-    application_or_404(application_id, db)
+def get_application_validation(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> FinancialValidationResponse:
+    application_for_user(application_id, user, db)
     return response_with_issues(get_validation(application_id, db), db)
 
 
 @router.get("/{application_id}/validation/issues", response_model=list[ValidationIssueResponse])
-def get_validation_issues(application_id: str, db: Session = Depends(get_db)) -> list[ValidationIssue]:
-    application_or_404(application_id, db)
+def get_validation_issues(application_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[ValidationIssue]:
+    application_for_user(application_id, user, db)
     validation = get_validation(application_id, db)
     return list(db.scalars(select(ValidationIssue).where(ValidationIssue.validation_id == validation.id).order_by(ValidationIssue.created_at)).all())
