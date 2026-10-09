@@ -14,6 +14,7 @@ from models.underwriting import UnderwritingEvent, UnderwritingRun  # noqa: F401
 from models.auth import User  # noqa: F401 - registers model
 from models.review import AuditLog, DocumentRequest, ReviewIssue, ReviewNote  # noqa: F401 - registers models
 from routes.applications import router as applications_router
+from routes.application_intake import router as application_intake_router
 from routes.documents import router as documents_router
 from routes.analysis import router as analysis_router
 from routes.ai import router as ai_router
@@ -61,6 +62,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(applications_router)
+app.include_router(application_intake_router)
 app.include_router(documents_router)
 app.include_router(analysis_router)
 app.include_router(ai_router)

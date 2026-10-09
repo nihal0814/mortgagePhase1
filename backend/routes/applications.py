@@ -1,3 +1,4 @@
+import shutil
 from datetime import datetime
 from uuid import uuid4
 
@@ -18,6 +19,10 @@ from models.auth import User
 from services.auth import get_current_user, require_roles
 from services.application_access import can_access_application, application_for_user
 from services.audit import record_audit
+from services.application_intake import consume_intake, discard_intake
+from models.document import Document
+from models.analysis import DocumentAnalysis
+from services.document_storage import application_upload_dir
 
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -59,13 +64,26 @@ def create_application(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Application:
+    values = payload.model_dump()
+    intake_id = values.pop("intake_id", None)
     application = Application(
         id=f"APP-{datetime.utcnow():%Y%m%d}-{uuid4().hex[:6].upper()}",
         created_by_user_id=user.id,
-        **payload.model_dump(),
+        **values,
     )
     db.add(application)
     record_audit(db, user, "APPLICATION_CREATED", "application", application.id, "Application created.", application.id)
+    if intake_id:
+        metadata, intake_path = consume_intake(intake_id, user.id)
+        document_id = str(uuid4())
+        storage_filename = f"{document_id}{metadata['suffix']}"
+        directory = application_upload_dir(application.id)
+        destination = directory / storage_filename
+        shutil.move(str(intake_path), destination)
+        db.add(Document(id=document_id, application_id=application.id, original_filename=metadata["original_filename"], storage_filename=storage_filename, category="Other", content_type=metadata["content_type"], file_size=metadata["file_size"], extraction_status="Extracted", extracted_text=metadata["extracted_text"], extracted_at=datetime.utcnow()))
+        db.add(DocumentAnalysis(id=str(uuid4()), document_id=document_id, model_name="Nemotron", status="Completed", structured_fields=metadata["fields"], summary=metadata["summary"], missing_information=metadata["missing_information"], review_flags=metadata["uncertain_information"] + metadata["conflicting_information"], analyzed_at=datetime.utcnow()))
+        discard_intake(intake_id, metadata["suffix"])
+        record_audit(db, user, "DOCUMENT_UPLOADED", "document", document_id, "Application document attached during creation.", application.id)
     db.commit()
     db.refresh(application)
     return application

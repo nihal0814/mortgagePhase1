@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from database.connection import Base, get_db
 from main import app
-from services import nemotron
+from services import application_intake, nemotron
 
 
 @pytest.fixture()
@@ -25,6 +25,7 @@ def client(tmp_path, monkeypatch):
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    monkeypatch.setattr(application_intake, "INTAKE_DIR", tmp_path / "intake")
     monkeypatch.setattr(nemotron, "NVIDIA_API_KEY", "test-key")
     monkeypatch.setattr(nemotron, "NVIDIA_BASE_URL", "https://nim.test/v1")
     monkeypatch.setattr(nemotron, "NVIDIA_MODEL", "test-nemotron")
@@ -119,12 +120,76 @@ def test_mocked_nim_document_and_application_analysis(client, monkeypatch):
     assert fetched.json()["source_document_ids"] == [document_id, second_document_id]
 
 
+def test_document_based_application_creation_attaches_verified_intake(client, monkeypatch):
+    monkeypatch.setattr(
+        nemotron,
+        "_post",
+        lambda _messages: {
+            "summary": "Application values found on page one.",
+            "fields": {
+                "borrower_name": {"value": "Alex Example", "source": {"page": 1, "snippet": "Applicant: Alex Example"}},
+                "monthly_income": {"value": 5000, "source": {"page": 1, "snippet": "Monthly income: 5000"}},
+                "monthly_debt": {"value": 500, "source": {"page": 1, "snippet": "Monthly debt: 500"}},
+                "loan_amount": {"value": 200000, "source": {"page": 1, "snippet": "Loan amount: 200000"}},
+                "property_value": {"value": 300000, "source": {"page": 1, "snippet": "Property value: 300000"}},
+            },
+            "missing_information": ["Email"],
+            "uncertain_information": [],
+            "conflicting_information": [],
+        },
+    )
+    intake = client.post(
+        "/application-intake",
+        files={"file": ("loan-application.pdf", io.BytesIO(pdf_bytes()), "application/pdf")},
+    )
+    assert intake.status_code == 200
+    assert intake.json()["fields"]["borrower_name"]["source"]["page"] == 1
+
+    created = client.post(
+        "/applications",
+        json={
+            "borrower_name": "Alex Example",
+            "monthly_income": 5000,
+            "monthly_debt": 500,
+            "loan_amount": 200000,
+            "property_value": 300000,
+            "intake_id": intake.json()["intake_id"],
+        },
+    )
+    assert created.status_code == 201
+    documents = client.get(f"/applications/{created.json()['id']}/documents")
+    assert documents.status_code == 200
+    assert documents.json()[0]["original_filename"] == "loan-application.pdf"
+    assert documents.json()[0]["extraction_status"] == "Extracted"
+
+
 def test_structured_output_validation_rejects_invalid_field_source():
     from pydantic import ValidationError
     from schemas.analysis import NemotronDocumentResult
 
     with pytest.raises(ValidationError):
         NemotronDocumentResult.model_validate({"summary": "bad", "fields": {"name": {"source": {"page": 0}}}})
+
+
+def test_application_summary_accepts_scalar_facts(monkeypatch):
+    monkeypatch.setattr(
+        nemotron,
+        "_post",
+        lambda _messages: {
+            "summary": "Income found.",
+            "borrower_details": {"name": "Alex Example"},
+            "income_information": {"gross_monthly_salary": 5000},
+            "document_coverage": ["Salary Slip"],
+            "source_document_ids": ["document-1"],
+        },
+    )
+
+    result = nemotron.summarize_application(
+        [{"document_id": "document-1", "category": "Salary Slip", "extracted_text": "salary", "analysis": {}}],
+    )
+
+    assert result.borrower_details["name"].value == "Alex Example"
+    assert result.income_information["gross_monthly_salary"].value == 5000
 
 
 def test_nim_timeout_is_returned_as_safe_error(client, monkeypatch):

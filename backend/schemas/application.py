@@ -21,7 +21,7 @@ class ApplicationBase(BaseModel):
 
 
 class ApplicationCreate(ApplicationBase):
-    pass
+    intake_id: str | None = None
 
 
 class ApplicationUpdate(ApplicationBase):

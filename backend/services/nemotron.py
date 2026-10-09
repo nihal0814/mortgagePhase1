@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,7 +14,7 @@ from config import (
     NVIDIA_TIMEOUT_SECONDS,
     NVIDIA_USE_JSON_MODE,
 )
-from schemas.analysis import ApplicationSummaryResult, NemotronDocumentResult
+from schemas.analysis import ApplicationIntakeResult, ApplicationSummaryResult, NemotronDocumentResult
 
 
 SYSTEM_PROMPT = """You are a document intelligence assistant for a mortgage operations tool.
@@ -172,14 +173,58 @@ def analyze_document(category: str, extracted_text: str) -> tuple[NemotronDocume
     return NemotronDocumentResult.model_validate(result), truncated, len(text)
 
 
+def analyze_application_intake(extracted_text: str) -> ApplicationIntakeResult:
+    text, _ = truncate_text(extracted_text)
+    fields = [
+        "borrower_name", "email", "phone", "monthly_income", "monthly_debt",
+        "loan_amount", "property_value", "property_address", "employment_type",
+    ]
+    schema = {
+        "summary": "brief description of the application evidence",
+        "fields": {
+            field: {
+                "value": "fact explicitly present in the document or null",
+                "source": {"page": "page number or null", "snippet": "short supporting snippet or null"},
+                "note": "explanation, uncertainty, unit conversion, or conflict; null when none",
+            }
+            for field in fields
+        },
+        "missing_information": ["required value absent from the document"],
+        "uncertain_information": ["value that is ambiguous or difficult to read"],
+        "conflicting_information": ["the document contains conflicting values"],
+    }
+    result = _post([
+        {"role": "system", "content": SYSTEM_PROMPT + " Extract application fields only. Never infer or calculate a value. Use null when a value is absent, unclear, or conflicting."},
+        {"role": "user", "content": f"Extract mortgage application fields from this document. Return JSON with this shape:\n{json.dumps(schema)}\n\nUntrusted document text begins below:\n<document_text>\n{text}\n</document_text>"},
+    ])
+    return ApplicationIntakeResult.model_validate(result)
+
+
 def summarize_application(documents: list[dict[str, Any]]) -> ApplicationSummaryResult:
     compact = []
     for document in documents:
         text, truncated = truncate_text(document["extracted_text"])
         compact.append({"document_id": document["document_id"], "category": document["category"], "analysis": document["analysis"], "text_excerpt": text, "text_truncated": truncated})
-    schema = {"summary": "concise document-derived overview", "borrower_details": {}, "income_information": {}, "document_coverage": [], "missing_information": [], "conflicting_values": [], "review_flags": [], "source_document_ids": []}
+    structured_field = {"value": "fact or null", "source": {"document_id": "string or null", "page": "number or null", "snippet": "short string or null"}, "note": "string or null"}
+    schema = {
+        "summary": "concise document-derived overview",
+        "borrower_details": {"field_name": structured_field},
+        "income_information": {"field_name": structured_field},
+        "document_coverage": ["document category"],
+        "missing_information": ["explicitly missing or unclear item"],
+        "conflicting_values": ["conflict description"],
+        "review_flags": ["human verification item"],
+        "source_document_ids": ["document ID from the source package"],
+    }
     result = _post([
         {"role": "system", "content": SYSTEM_PROMPT + " This is a cross-document summary. Preserve source document IDs in fields and do not make an eligibility decision."},
         {"role": "user", "content": f"Summarize the successfully analyzed mortgage documents. Return JSON with this shape:\n{json.dumps(schema)}\nSource package:\n<documents>\n{json.dumps(compact)}\n</documents>"},
     ])
+    for field_name in ("borrower_details", "income_information"):
+        fields = result.get(field_name)
+        if isinstance(fields, Mapping):
+            result[field_name] = {
+                key: value if isinstance(value, Mapping) else {"value": value}
+                for key, value in fields.items()
+            }
     return ApplicationSummaryResult.model_validate(result)

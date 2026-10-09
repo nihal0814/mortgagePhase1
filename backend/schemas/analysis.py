@@ -26,6 +26,14 @@ class NemotronDocumentResult(BaseModel):
     review_flags: list[str] = Field(default_factory=list, max_length=50)
 
 
+class ApplicationIntakeResult(BaseModel):
+    summary: str = Field(default="", max_length=5000)
+    fields: dict[str, StructuredField] = Field(default_factory=dict)
+    missing_information: list[str] = Field(default_factory=list, max_length=50)
+    uncertain_information: list[str] = Field(default_factory=list, max_length=50)
+    conflicting_information: list[str] = Field(default_factory=list, max_length=50)
+
+
 class DocumentAnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
